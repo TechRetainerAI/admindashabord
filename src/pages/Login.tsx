@@ -37,7 +37,7 @@ export function Login() {
     <div className="login">
       <form className="login__card" onSubmit={submit}>
         <div className="brand brand--lg">
-          <span className="brand__mark">MD</span>
+          <img className="brand__logo brand__logo--lg" src="/medan-logo.png" alt="" />
           <span className="brand__text">
             MeDan <em>Admin</em>
           </span>
