@@ -203,6 +203,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** 409 when the room has bookings (past or active) — use maintenance instead. */
+  deleteRoom: (hostelId: string, roomId: string) =>
+    request<void>(`/api/hostels/${hostelId}/rooms/${roomId}`, { method: 'DELETE' }),
+
   // --- manual payments ------------------------------------------------------
   manualPayments: (params: { status?: ManualPaymentStatus } = {}) =>
     request<ManualPaymentReview[]>(`/api/admin/payments/manual${qs(params)}`),

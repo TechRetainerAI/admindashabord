@@ -292,6 +292,8 @@ textarea { resize: vertical; }
 .resolve__note { width: 100%; }
 .resolve__actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+.row__actions { display: flex; gap: 6px; justify-content: flex-end; }
+
 /* ------------------------------------------------------ manual payments */
 
 .proofrow { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; }

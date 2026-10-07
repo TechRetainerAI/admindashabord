@@ -326,6 +326,24 @@ function Photos({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }
 function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }) {
   // null = closed, 'new' = add form, otherwise the room being edited.
   const [form, setForm] = useState<'new' | Room | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function remove(r: Room) {
+    if (!window.confirm(`Delete ${r.label}? This cannot be undone.`)) return
+    setDeletingId(r.id)
+    setDeleteError(null)
+    try {
+      await api.deleteRoom(hostel.id, r.id)
+      if (form !== 'new' && form?.id === r.id) setForm(null)
+      onChanged()
+    } catch (e) {
+      // Usually the API's 409: the room has bookings and must go to maintenance.
+      setDeleteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <Card
@@ -351,6 +369,8 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
           }}
         />
       )}
+
+      {deleteError && <ErrorBox message={deleteError} />}
 
       {hostel.rooms.length === 0 ? (
         <Empty
@@ -387,13 +407,23 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                     </Badge>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => setForm(form !== 'new' && form?.id === r.id ? null : r)}
-                    >
-                      Edit
-                    </button>
+                    <div className="row__actions">
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => setForm(form !== 'new' && form?.id === r.id ? null : r)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--danger btn--sm"
+                        disabled={deletingId === r.id}
+                        onClick={() => void remove(r)}
+                      >
+                        {deletingId === r.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
