@@ -186,6 +186,14 @@ export interface CreateRoomRequest {
   floor?: string
 }
 
+/**
+ * PUT /api/hostels/{hostelId}/rooms/{roomId} — same shape as create, but
+ * pricePerSemester is the LISTED price (MeDan's 5% already in) and is stored
+ * exactly as sent; the form round-trips what the API returned. Omitted floor
+ * keeps the current one.
+ */
+export type UpdateRoomRequest = CreateRoomRequest
+
 /** POST /api/admin/auth/login | /register — a MeDan-signed staff token. */
 export interface StaffAuthResponse {
   token: string
@@ -224,6 +232,31 @@ export interface NotificationReach {
   androidDevices: number
   iosDevices: number
   pushConfigured: boolean
+}
+
+/** States a manual MoMo transfer can be in. Only these three reach the queue. */
+export type ManualPaymentStatus = 'pendingReview' | 'success' | 'rejected'
+
+/** GET /api/admin/payments/manual — a hand-made MoMo transfer awaiting a decision. */
+export interface ManualPaymentReview {
+  reference: string
+  bookingId: string
+  amount: number
+  status: ManualPaymentStatus
+  studentUserId: string
+  studentName: string
+  studentEmail: string
+  hostelName: string
+  senderPhone: string | null
+  senderName: string | null
+  providerTransactionId: string | null
+  /** Authorized endpoint for the screenshot — fetch with the bearer token, not an <img src>. */
+  proofUrl: string | null
+  submittedAt: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  /** Other payment references quoting the same transaction ID — a reused receipt. */
+  duplicateOf: string[]
 }
 
 /** The profile the API returns for the signed-in user. */

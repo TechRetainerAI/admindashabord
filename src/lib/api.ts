@@ -10,6 +10,8 @@ import type {
   CreateRoomRequest,
   Hostel,
   HostelDetail,
+  ManualPaymentReview,
+  ManualPaymentStatus,
   Me,
   NotificationReach,
   Referral,
@@ -18,6 +20,7 @@ import type {
   SendNotificationResponse,
   StaffAuthResponse,
   UpdateHostelRequest,
+  UpdateRoomRequest,
   UserRole,
 } from './types'
 
@@ -192,6 +195,45 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  /** 409 when reducing beds that are reserved or occupied. */
+  updateRoom: (hostelId: string, roomId: string, body: UpdateRoomRequest) =>
+    request<Room>(`/api/hostels/${hostelId}/rooms/${roomId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  // --- manual payments ------------------------------------------------------
+  manualPayments: (params: { status?: ManualPaymentStatus } = {}) =>
+    request<ManualPaymentReview[]>(`/api/admin/payments/manual${qs(params)}`),
+
+  /** Accepts the transfer — moves the booking into escrow, like a Paystack success. */
+  approveManualPayment: (reference: string) =>
+    request<ManualPaymentReview>(`/api/admin/payments/manual/${reference}/approve`, {
+      method: 'POST',
+    }),
+
+  /** The student is shown `reason` and can submit a corrected proof. */
+  rejectManualPayment: (reference: string, reason: string) =>
+    request<ManualPaymentReview>(`/api/admin/payments/manual/${reference}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  /**
+   * Fetches a proof screenshot (an authorized endpoint, not a static file) and
+   * returns an object URL for an <img>. Callers must revokeObjectURL it.
+   */
+  async proofObjectUrl(path: string): Promise<string> {
+    let res: Response
+    try {
+      res = await fetch(`${BASE_URL}${path}`, { headers: authHeader() })
+    } catch {
+      throw new ApiError(`Cannot reach the MeDan API at ${BASE_URL}.`, 0)
+    }
+    if (!res.ok) throw new ApiError(messageFrom(await parse(res), res.status), res.status)
+    return URL.createObjectURL(await res.blob())
+  },
 
   // --- referrals ----------------------------------------------------------
   referrals: (params: { status?: string } = {}) =>

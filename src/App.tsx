@@ -13,6 +13,7 @@ import { Hostels } from './pages/Hostels'
 import { Login } from './pages/Login'
 import { NewHostel } from './pages/NewHostel'
 import { Notifications } from './pages/Notifications'
+import { Payments } from './pages/Payments'
 import { Referrals } from './pages/Referrals'
 
 /**
@@ -47,6 +48,7 @@ function Gate() {
         <Route index element={<Dashboard />} />
         <Route path="disputes" element={<Disputes />} />
         <Route path="bookings" element={<Bookings />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="hostels" element={<Hostels />} />
         <Route path="hostels/new" element={<NewHostel />} />
         <Route path="hostels/:id" element={<HostelDetail />} />

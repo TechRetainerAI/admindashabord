@@ -11,7 +11,7 @@ import {
   ROOM_TYPES,
   photoSrc,
 } from '../lib/catalog'
-import type { Gender, HostelDetail as Detail, PropertyType, RoomType } from '../lib/types'
+import type { Gender, HostelDetail as Detail, PropertyType, Room, RoomType } from '../lib/types'
 import {
   Badge,
   Card,
@@ -21,6 +21,7 @@ import {
   Spinner,
   cedis,
   humanize,
+  withMarkup,
 } from '../components/ui'
 
 /**
@@ -203,8 +204,8 @@ function EditForm({ hostel, onSaved }: { hostel: Detail; onSaved: () => void }) 
         </div>
 
         <Field
-          label="Price range"
-          hint="Set by the rooms below — add or edit a room to change it."
+          label="Price range (as students see it)"
+          hint="Set by the rooms below; listed prices already include MeDan's 5%."
         >
           <input
             value={`${cedis(hostel.minPrice)} – ${cedis(hostel.maxPrice)}`}
@@ -323,22 +324,29 @@ function Photos({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }
 // -------------------------------------------------------------------- rooms
 
 function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }) {
-  const [open, setOpen] = useState(false)
+  // null = closed, 'new' = add form, otherwise the room being edited.
+  const [form, setForm] = useState<'new' | Room | null>(null)
 
   return (
     <Card
       title={`Rooms (${hostel.rooms.length})`}
       action={
-        <button type="button" className="btn btn--primary btn--sm" onClick={() => setOpen(!open)}>
-          {open ? 'Cancel' : 'Add room'}
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          onClick={() => setForm(form ? null : 'new')}
+        >
+          {form ? 'Cancel' : 'Add room'}
         </button>
       }
     >
-      {open && (
-        <AddRoom
+      {form && (
+        <RoomForm
+          key={form === 'new' ? 'new' : form.id}
           hostelId={hostel.id}
-          onAdded={() => {
-            setOpen(false)
+          room={form === 'new' ? undefined : form}
+          onSaved={() => {
+            setForm(null)
             onChanged()
           }}
         />
@@ -356,10 +364,11 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
               <tr>
                 <th>Label</th>
                 <th>Type</th>
-                <th className="num">Price / semester</th>
+                <th className="num">Listed price / semester</th>
                 <th className="num">Beds free</th>
                 <th>Gender</th>
                 <th>Status</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -377,6 +386,15 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                       {humanize(r.status)}
                     </Badge>
                   </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => setForm(form !== 'new' && form?.id === r.id ? null : r)}
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -387,12 +405,28 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
   )
 }
 
-function AddRoom({ hostelId, onAdded }: { hostelId: string; onAdded: () => void }) {
-  const [label, setLabel] = useState('')
-  const [type, setType] = useState<RoomType>('single')
-  const [capacity, setCapacity] = useState(1)
-  const [pricePerSemester, setPrice] = useState('')
-  const [gender, setGender] = useState<Gender>('mixed')
+/**
+ * Add or edit a room. The price field means different things in the two modes:
+ * on create it is the owner's ASKING price (the API puts MeDan's 5% on top);
+ * on edit it is the LISTED price loaded from the API, markup already in, and
+ * the API stores it exactly as sent — re-marking it up would compound 5% on
+ * every save.
+ */
+function RoomForm({
+  hostelId,
+  room,
+  onSaved,
+}: {
+  hostelId: string
+  room?: Room
+  onSaved: () => void
+}) {
+  const editing = room !== undefined
+  const [label, setLabel] = useState(room?.label ?? '')
+  const [type, setType] = useState<RoomType>(room?.type ?? 'single')
+  const [capacity, setCapacity] = useState(room?.capacity ?? 1)
+  const [pricePerSemester, setPrice] = useState(room ? String(room.pricePerSemester) : '')
+  const [gender, setGender] = useState<Gender>(room?.gender ?? 'mixed')
   const [floor, setFloor] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -403,20 +437,31 @@ function AddRoom({ hostelId, onAdded }: { hostelId: string; onAdded: () => void 
     setCapacity(ROOM_TYPES.find((t) => t.value === next)?.capacity ?? 1)
   }
 
+  const price = Number(pricePerSemester) || 0
+  const priceHint = editing
+    ? price > 0
+      ? `Listed price — students pay this; the owner receives ${cedis(Math.round(price / 1.05))} after MeDan's 5%.`
+      : 'Listed price — saved exactly as entered, MeDan’s 5% already inside.'
+    : price > 0
+      ? `Students will see ${cedis(withMarkup(price))} (asking price + MeDan's 5%).`
+      : "Owner's asking price — students see it plus MeDan's 5%."
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      await api.createRoom(hostelId, {
+      const body = {
         label: label.trim(),
         type,
         capacity,
-        pricePerSemester: Number(pricePerSemester) || 0,
+        pricePerSemester: price,
         gender,
         floor: floor.trim() || undefined,
-      })
-      onAdded()
+      }
+      if (editing) await api.updateRoom(hostelId, room.id, body)
+      else await api.createRoom(hostelId, body)
+      onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -445,7 +490,14 @@ function AddRoom({ hostelId, onAdded }: { hostelId: string; onAdded: () => void 
             ))}
           </select>
         </Field>
-        <Field label="Beds" hint="1–4. A bed is created for each.">
+        <Field
+          label="Beds"
+          hint={
+            editing
+              ? 'Adding creates free beds; reducing only removes beds nobody holds.'
+              : '1–4. A bed is created for each.'
+          }
+        >
           <input
             type="number"
             min={1}
@@ -454,7 +506,14 @@ function AddRoom({ hostelId, onAdded }: { hostelId: string; onAdded: () => void 
             onChange={(e) => setCapacity(Number(e.target.value))}
           />
         </Field>
-        <Field label="Price per bed / semester (GH₵)">
+        <Field
+          label={
+            editing
+              ? 'Listed price per bed / semester (GH₵)'
+              : 'Asking price per bed / semester (GH₵)'
+          }
+          hint={priceHint}
+        >
           <input
             type="number"
             min="0"
@@ -473,13 +532,16 @@ function AddRoom({ hostelId, onAdded }: { hostelId: string; onAdded: () => void 
             ))}
           </select>
         </Field>
-        <Field label="Floor (optional)">
+        <Field
+          label="Floor (optional)"
+          hint={editing ? 'Leave blank to keep the current floor.' : undefined}
+        >
           <input value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="e.g. 2nd" />
         </Field>
       </div>
       <div className="formactions">
         <button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-          {busy ? 'Adding…' : 'Add room'}
+          {busy ? 'Saving…' : editing ? `Save ${room.label}` : 'Add room'}
         </button>
       </div>
     </form>

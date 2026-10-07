@@ -109,6 +109,13 @@ export function humanize(value: string): string {
 
 export const cedis = (amount: number) => `GH₵${amount.toLocaleString()}`
 
+/**
+ * The student-facing price for an owner's asking price — the API adds MeDan's
+ * 5% on top at listing time (Pricing.WithMarkup). Prices the API returns
+ * already include it; this is only for previewing while typing a new price.
+ */
+export const withMarkup = (asking: number) => Math.round(asking * 1.05)
+
 export const shortDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
