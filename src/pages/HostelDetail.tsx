@@ -129,8 +129,10 @@ function EditForm({ hostel, onSaved }: { hostel: Detail; onSaved: () => void }) 
         lng: Number(lng) || 0,
         distanceKm: Number(distanceKm) || 0,
         // Room prices are authoritative — send the current range back unchanged.
-        minPrice: hostel.minPrice,
-        maxPrice: hostel.maxPrice,
+        // The API takes OWNER amounts and re-adds the 5%, so round-trip the
+        // owner fields; sending minPrice would walk the range up 5% per save.
+        minPrice: hostel.ownerMinPrice,
+        maxPrice: hostel.ownerMaxPrice,
         amenities,
       })
       setSaved(true)
@@ -204,11 +206,11 @@ function EditForm({ hostel, onSaved }: { hostel: Detail; onSaved: () => void }) 
         </div>
 
         <Field
-          label="Price range (as students see it)"
-          hint="Set by the rooms below; listed prices already include MeDan's 5%."
+          label="Price range (what owners receive)"
+          hint={`Set by the rooms below. Students see ${cedis(hostel.minPrice)} – ${cedis(hostel.maxPrice)} (MeDan's 5% on top).`}
         >
           <input
-            value={`${cedis(hostel.minPrice)} – ${cedis(hostel.maxPrice)}`}
+            value={`${cedis(hostel.ownerMinPrice)} – ${cedis(hostel.ownerMaxPrice)}`}
             readOnly
             disabled
           />
@@ -384,7 +386,8 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
               <tr>
                 <th>Label</th>
                 <th>Type</th>
-                <th className="num">Listed price / semester</th>
+                <th className="num">Owner / semester</th>
+                <th className="num">Students pay</th>
                 <th className="num">Beds free</th>
                 <th>Gender</th>
                 <th>Status</th>
@@ -396,6 +399,7 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                 <tr key={r.id}>
                   <td className="cell__main">{r.label}</td>
                   <td>{humanize(r.type)}</td>
+                  <td className="num">{cedis(r.ownerPrice)}</td>
                   <td className="num">{cedis(r.pricePerSemester)}</td>
                   <td className="num">
                     {r.availableBeds} / {r.capacity}
@@ -436,11 +440,10 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
 }
 
 /**
- * Add or edit a room. The price field means different things in the two modes:
- * on create it is the owner's ASKING price (the API puts MeDan's 5% on top);
- * on edit it is the LISTED price loaded from the API, markup already in, and
- * the API stores it exactly as sent — re-marking it up would compound 5% on
- * every save.
+ * Add or edit a room. The price field always means the OWNER's price — what
+ * they receive — and the API adds MeDan's 5% on top for students. On edit the
+ * form loads room.ownerPrice (never the student-facing price), so the number
+ * round-trips without compounding.
  */
 function RoomForm({
   hostelId,
@@ -455,7 +458,7 @@ function RoomForm({
   const [label, setLabel] = useState(room?.label ?? '')
   const [type, setType] = useState<RoomType>(room?.type ?? 'single')
   const [capacity, setCapacity] = useState(room?.capacity ?? 1)
-  const [pricePerSemester, setPrice] = useState(room ? String(room.pricePerSemester) : '')
+  const [pricePerSemester, setPrice] = useState(room ? String(room.ownerPrice) : '')
   const [gender, setGender] = useState<Gender>(room?.gender ?? 'mixed')
   const [floor, setFloor] = useState('')
   const [busy, setBusy] = useState(false)
@@ -468,13 +471,10 @@ function RoomForm({
   }
 
   const price = Number(pricePerSemester) || 0
-  const priceHint = editing
-    ? price > 0
-      ? `Listed price — students pay this; the owner receives ${cedis(Math.round(price / 1.05))} after MeDan's 5%.`
-      : 'Listed price — saved exactly as entered, MeDan’s 5% already inside.'
-    : price > 0
-      ? `Students will see ${cedis(withMarkup(price))} (asking price + MeDan's 5%).`
-      : "Owner's asking price — students see it plus MeDan's 5%."
+  const priceHint =
+    price > 0
+      ? `The owner receives exactly ${cedis(price)}; students pay ${cedis(withMarkup(price))} (MeDan's 5% on top).`
+      : "The owner's price — students pay it plus MeDan's 5%."
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -536,14 +536,7 @@ function RoomForm({
             onChange={(e) => setCapacity(Number(e.target.value))}
           />
         </Field>
-        <Field
-          label={
-            editing
-              ? 'Listed price per bed / semester (GH₵)'
-              : 'Asking price per bed / semester (GH₵)'
-          }
-          hint={priceHint}
-        >
+        <Field label="Owner price per bed / semester (GH₵)" hint={priceHint}>
           <input
             type="number"
             min="0"

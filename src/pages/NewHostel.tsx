@@ -6,11 +6,11 @@ import { AMENITIES, CAMPUSES, PROPERTY_TYPES } from '../lib/catalog'
 import type { PropertyType } from '../lib/types'
 import { Card, ErrorBox, Field, cedis, withMarkup } from '../components/ui'
 
-/** Price inputs take the owner's asking price; students see it plus MeDan's 5%. */
+/** Price inputs take the owner's price — what they receive; students pay +5%. */
 const askingHint = (value: string) =>
   Number(value) > 0
-    ? `Students will see ${cedis(withMarkup(Number(value)))} (asking price + MeDan's 5%).`
-    : "Owner's asking price — students see it plus MeDan's 5%."
+    ? `The owner receives exactly ${cedis(Number(value))}; students pay ${cedis(withMarkup(Number(value)))}.`
+    : "The owner's price — students pay it plus MeDan's 5%."
 
 /**
  * Creates a listing, then uploads its photos. The API auto-creates the caller's
@@ -166,10 +166,10 @@ export function NewHostel() {
                 placeholder="1.5"
               />
             </Field>
-            <Field label="Min asking price / semester (GH₵)" hint={askingHint(minPrice)}>
+            <Field label="Owner min price / semester (GH₵)" hint={askingHint(minPrice)}>
               <input type="number" min="0" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="1200" />
             </Field>
-            <Field label="Max asking price / semester (GH₵)" hint={askingHint(maxPrice)}>
+            <Field label="Owner max price / semester (GH₵)" hint={askingHint(maxPrice)}>
               <input type="number" min="0" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="2500" />
             </Field>
           </div>

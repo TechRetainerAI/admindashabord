@@ -106,8 +106,12 @@ export interface Hostel {
   lat: number
   lng: number
   distanceKm: number
+  /** Student-facing range, MeDan's 5% included. */
   minPrice: number
   maxPrice: number
+  /** The range as the OWNER receives it — bind admin forms/displays to these. */
+  ownerMinPrice: number
+  ownerMaxPrice: number
   photos: string[]
   amenities: string[]
   isVerified: boolean
@@ -124,7 +128,10 @@ export interface Room {
   hostelId: string
   label: string
   type: RoomType
+  /** What the STUDENT pays, MeDan's 5% included. */
   pricePerSemester: number
+  /** What the OWNER receives — the price they typed. Edit forms bind to this. */
+  ownerPrice: number
   status: 'available' | 'occupied' | 'maintenance'
   capacity: number
   availableBeds: number
@@ -187,10 +194,10 @@ export interface CreateRoomRequest {
 }
 
 /**
- * PUT /api/hostels/{hostelId}/rooms/{roomId} — same shape as create, but
- * pricePerSemester is the LISTED price (MeDan's 5% already in) and is stored
- * exactly as sent; the form round-trips what the API returned. Omitted floor
- * keeps the current one.
+ * PUT /api/hostels/{hostelId}/rooms/{roomId} — same meaning as create:
+ * pricePerSemester is the OWNER's price and the API adds the 5% on top.
+ * Edit forms load Room.ownerPrice so the number round-trips without
+ * compounding. Omitted floor keeps the current one.
  */
 export type UpdateRoomRequest = CreateRoomRequest
 
