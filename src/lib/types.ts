@@ -136,6 +136,29 @@ export interface Room {
   capacity: number
   availableBeds: number
   gender: Gender
+  /** The room's own gallery, cover first. Empty = the app shows the hostel's photos. */
+  photos: string[]
+  /** Same photos with ids so a specific one can be deleted. */
+  photoItems: HostelPhoto[]
+}
+
+/**
+ * GET /api/hostels/{id}/rooms/availability — free beds grouped the way a
+ * student chooses: how many share the room, and who it is for. Rooms under
+ * maintenance are excluded.
+ */
+export interface AvailabilityGroup {
+  type: RoomType
+  capacity: number
+  gender: Gender
+  /** Rooms of this kind with at least one bed free. */
+  roomsWithSpace: number
+  /** Free beds across all of them. */
+  freeBeds: number
+  /** Every room of this kind, free or not. */
+  totalRooms: number
+  /** Cheapest STUDENT price among the rooms with space, GH₵. Null if none. */
+  fromPrice: number | null
 }
 
 export interface HostelDetail extends Hostel {

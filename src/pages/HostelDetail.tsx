@@ -81,8 +81,71 @@ export function HostelDetail() {
 
       <EditForm hostel={data} onSaved={reload} />
       <Photos hostel={data} onChanged={reload} />
+      <Availability hostel={data} />
       <Rooms hostel={data} onChanged={reload} />
     </>
+  )
+}
+
+// ------------------------------------------------------------- availability
+
+/**
+ * What the student app's availability endpoint says about this hostel: free
+ * beds grouped by sharing and gender, maintenance rooms excluded. Read-only —
+ * it exists so staff see the exact numbers students are quoted.
+ */
+function Availability({ hostel }: { hostel: Detail }) {
+  // hostel.rooms is a fresh array on every reload, so any room change
+  // (add/edit/delete/status) refetches the summary too.
+  const { data, loading, error, reload } = useAsync(
+    () => api.roomAvailability(hostel.id),
+    [hostel.id, hostel.rooms],
+  )
+
+  return (
+    <Card title="Availability (as students see it)">
+      {error && <ErrorBox message={error} onRetry={reload} />}
+      {loading && !data && <Spinner />}
+
+      {data &&
+        (data.length === 0 ? (
+          <Empty
+            title="Nothing on the market"
+            hint="Every room is under maintenance, or none have been added yet."
+          />
+        ) : (
+          <div className="tablewrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Room kind</th>
+                  <th>Gender</th>
+                  <th className="num">Beds free</th>
+                  <th className="num">Rooms with space</th>
+                  <th className="num">From (students pay)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((g) => (
+                  <tr key={`${g.type}-${g.capacity}-${g.gender}`}>
+                    <td className="cell__main">
+                      {humanize(g.type)} · {g.capacity} bed{g.capacity === 1 ? '' : 's'}
+                    </td>
+                    <td>{humanize(g.gender)}</td>
+                    <td className="num">
+                      {g.freeBeds === 0 ? <Badge tone="warn">Full</Badge> : g.freeBeds}
+                    </td>
+                    <td className="num">
+                      {g.roomsWithSpace} / {g.totalRooms}
+                    </td>
+                    <td className="num">{g.fromPrice === null ? '—' : cedis(g.fromPrice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+    </Card>
   )
 }
 
@@ -328,22 +391,43 @@ function Photos({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }
 function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void }) {
   // null = closed, 'new' = add form, otherwise the room being edited.
   const [form, setForm] = useState<'new' | Room | null>(null)
+  // The id, not the room: a reload replaces room objects, and the open panel
+  // must show the fresh gallery rather than the one captured at click time.
+  const [photosForId, setPhotosForId] = useState<string | null>(null)
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const photosFor = photosForId ? (hostel.rooms.find((r) => r.id === photosForId) ?? null) : null
 
   async function remove(r: Room) {
     if (!window.confirm(`Delete ${r.label}? This cannot be undone.`)) return
     setDeletingId(r.id)
-    setDeleteError(null)
+    setActionError(null)
     try {
       await api.deleteRoom(hostel.id, r.id)
       if (form !== 'new' && form?.id === r.id) setForm(null)
+      if (photosForId === r.id) setPhotosForId(null)
       onChanged()
     } catch (e) {
       // Usually the API's 409: the room has bookings and must go to maintenance.
-      setDeleteError(e instanceof Error ? e.message : String(e))
+      setActionError(e instanceof Error ? e.message : String(e))
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  /** The room-level market switch — bed availability is untouched. */
+  async function toggleMaintenance(r: Room) {
+    setStatusBusyId(r.id)
+    setActionError(null)
+    try {
+      await api.setRoomStatus(hostel.id, r.id, r.status === 'maintenance' ? 'available' : 'maintenance')
+      onChanged()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setStatusBusyId(null)
     }
   }
 
@@ -372,7 +456,16 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
         />
       )}
 
-      {deleteError && <ErrorBox message={deleteError} />}
+      {photosFor && (
+        <RoomPhotos
+          hostelId={hostel.id}
+          room={photosFor}
+          onChanged={onChanged}
+          onClose={() => setPhotosForId(null)}
+        />
+      )}
+
+      {actionError && <ErrorBox message={actionError} />}
 
       {hostel.rooms.length === 0 ? (
         <Empty
@@ -390,6 +483,7 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                 <th className="num">Students pay</th>
                 <th className="num">Beds free</th>
                 <th>Gender</th>
+                <th className="num">Photos</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -405,8 +499,17 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                     {r.availableBeds} / {r.capacity}
                   </td>
                   <td>{humanize(r.gender)}</td>
+                  <td className="num">{r.photoItems.length}</td>
                   <td>
-                    <Badge tone={r.status === 'available' ? 'good' : 'neutral'}>
+                    <Badge
+                      tone={
+                        r.status === 'available'
+                          ? 'good'
+                          : r.status === 'maintenance'
+                            ? 'warn'
+                            : 'neutral'
+                      }
+                    >
                       {humanize(r.status)}
                     </Badge>
                   </td>
@@ -418,6 +521,26 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                         onClick={() => setForm(form !== 'new' && form?.id === r.id ? null : r)}
                       >
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => setPhotosForId(photosForId === r.id ? null : r.id)}
+                      >
+                        Photos
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        disabled={statusBusyId === r.id}
+                        title="Takes the room off the market without touching its beds."
+                        onClick={() => void toggleMaintenance(r)}
+                      >
+                        {statusBusyId === r.id
+                          ? '…'
+                          : r.status === 'maintenance'
+                            ? 'Reopen'
+                            : 'Maintenance'}
                       </button>
                       <button
                         type="button"
@@ -568,5 +691,114 @@ function RoomForm({
         </button>
       </div>
     </form>
+  )
+}
+
+// ------------------------------------------------------------- room photos
+
+/**
+ * A room's own gallery, separate from the hostel's on purpose: those photos
+ * show the building, and a student picking between a two-in-a-room and a
+ * four-in-a-room needs to see the rooms themselves. The first photo uploaded
+ * becomes the room's cover; with none, the app falls back to the hostel's
+ * gallery.
+ */
+function RoomPhotos({
+  hostelId,
+  room,
+  onChanged,
+  onClose,
+}: {
+  hostelId: string
+  room: Room
+  onChanged: () => void
+  onClose: () => void
+}) {
+  const [files, setFiles] = useState<File[]>([])
+  const [busy, setBusy] = useState(false)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function upload() {
+    if (files.length === 0) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.uploadRoomPhotos(hostelId, room.id, files)
+      setFiles([])
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(photoId: string) {
+    setRemoving(photoId)
+    setError(null)
+    try {
+      await api.deleteRoomPhoto(hostelId, room.id, photoId)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  return (
+    <div className="addroom">
+      <div className="page__head">
+        <h3>Photos — {room.label}</h3>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
+          Close
+        </button>
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      {room.photoItems.length === 0 ? (
+        <Empty
+          title="No photos of this room yet"
+          hint="Students see the hostel's gallery until the room has its own."
+        />
+      ) : (
+        <div className="thumbs">
+          {room.photoItems.map((p) => (
+            <div key={p.id} className="thumb">
+              <img src={photoSrc(p.url)} alt="" loading="lazy" />
+              {p.isCover && <span className="thumb__tag">Cover</span>}
+              <button
+                type="button"
+                className="thumb__del"
+                title="Delete photo"
+                disabled={removing === p.id}
+                onClick={() => void remove(p.id)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="filters">
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+        />
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          disabled={busy || files.length === 0}
+          onClick={() => void upload()}
+        >
+          {busy ? 'Uploading…' : `Upload${files.length ? ` ${files.length}` : ''}`}
+        </button>
+      </div>
+    </div>
   )
 }

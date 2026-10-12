@@ -4,6 +4,7 @@ import type {
   AdminCreateUserRequest,
   AdminStats,
   AdminUser,
+  AvailabilityGroup,
   CampusEvent,
   SaveEventRequest,
   CreateHostelRequest,
@@ -206,6 +207,32 @@ export const api = {
   /** 409 when the room has bookings (past or active) — use maintenance instead. */
   deleteRoom: (hostelId: string, roomId: string) =>
     request<void>(`/api/hostels/${hostelId}/rooms/${roomId}`, { method: 'DELETE' }),
+
+  /** Free beds grouped by sharing and gender; maintenance rooms are left out. */
+  roomAvailability: (hostelId: string) =>
+    request<AvailabilityGroup[]>(`/api/hostels/${hostelId}/rooms/availability`, {}, { auth: false }),
+
+  /** The room's own gallery — the first photo ever uploaded becomes its cover. */
+  uploadRoomPhotos: (hostelId: string, roomId: string, files: File[]) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f)
+    return request<unknown>(`/api/hostels/${hostelId}/rooms/${roomId}/photos`, {
+      method: 'POST',
+      body: form,
+    })
+  },
+
+  deleteRoomPhoto: (hostelId: string, roomId: string, photoId: string) =>
+    request<void>(`/api/hostels/${hostelId}/rooms/${roomId}/photos/${photoId}`, {
+      method: 'DELETE',
+    }),
+
+  /** Take a room off the market (maintenance) or put it back. Beds are untouched. */
+  setRoomStatus: (hostelId: string, roomId: string, status: Room['status']) =>
+    request<Room>(`/api/hostels/${hostelId}/rooms/${roomId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
 
   // --- manual payments ------------------------------------------------------
   manualPayments: (params: { status?: ManualPaymentStatus } = {}) =>
