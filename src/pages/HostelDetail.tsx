@@ -11,7 +11,14 @@ import {
   ROOM_TYPES,
   photoSrc,
 } from '../lib/catalog'
-import type { Gender, HostelDetail as Detail, PropertyType, Room, RoomType } from '../lib/types'
+import type {
+  BedSummary,
+  Gender,
+  HostelDetail as Detail,
+  PropertyType,
+  Room,
+  RoomType,
+} from '../lib/types'
 import {
   Badge,
   Card,
@@ -394,11 +401,13 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
   // The id, not the room: a reload replaces room objects, and the open panel
   // must show the fresh gallery rather than the one captured at click time.
   const [photosForId, setPhotosForId] = useState<string | null>(null)
+  const [bedsForId, setBedsForId] = useState<string | null>(null)
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const photosFor = photosForId ? (hostel.rooms.find((r) => r.id === photosForId) ?? null) : null
+  const bedsFor = bedsForId ? (hostel.rooms.find((r) => r.id === bedsForId) ?? null) : null
 
   async function remove(r: Room) {
     if (!window.confirm(`Delete ${r.label}? This cannot be undone.`)) return
@@ -465,6 +474,15 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
         />
       )}
 
+      {bedsFor && (
+        <RoomBeds
+          hostelId={hostel.id}
+          room={bedsFor}
+          onChanged={onChanged}
+          onClose={() => setBedsForId(null)}
+        />
+      )}
+
       {actionError && <ErrorBox message={actionError} />}
 
       {hostel.rooms.length === 0 ? (
@@ -528,6 +546,13 @@ function Rooms({ hostel, onChanged }: { hostel: Detail; onChanged: () => void })
                         onClick={() => setPhotosForId(photosForId === r.id ? null : r.id)}
                       >
                         Photos
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => setBedsForId(bedsForId === r.id ? null : r.id)}
+                      >
+                        Beds
                       </button>
                       <button
                         type="button"
@@ -798,6 +823,111 @@ function RoomPhotos({
         >
           {busy ? 'Uploading…' : `Upload${files.length ? ` ${files.length}` : ''}`}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------------- beds
+
+const BED_TONE: Record<BedSummary['status'], 'good' | 'info' | 'neutral'> = {
+  available: 'good',
+  reserved: 'info',
+  occupied: 'neutral',
+}
+
+/**
+ * The individual beds in a room. Marking one occupied is for the walk-in who
+ * paid outside the app — it takes the bed off the student app's "beds free"
+ * count so the advertised number matches the physical room. A bed a booking
+ * holds (reserved or checked in through the app) can't be flipped by hand;
+ * the API refuses it because the bed's state belongs to that booking.
+ */
+function RoomBeds({
+  hostelId,
+  room,
+  onChanged,
+  onClose,
+}: {
+  hostelId: string
+  room: Room
+  onChanged: () => void
+  onClose: () => void
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function toggle(bed: BedSummary) {
+    setBusyId(bed.id)
+    setError(null)
+    try {
+      await api.setBedStatus(
+        hostelId,
+        room.id,
+        bed.id,
+        bed.status === 'available' ? 'occupied' : 'available',
+      )
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="addroom">
+      <div className="page__head">
+        <h3>Beds — {room.label}</h3>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
+          Close
+        </button>
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      <div className="tablewrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Bed</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {room.beds.map((b) => (
+              <tr key={b.id}>
+                <td className="cell__main">{b.label}</td>
+                <td>
+                  <Badge tone={BED_TONE[b.status]}>
+                    {b.hasBooking ? `${humanize(b.status)} · booking` : humanize(b.status)}
+                  </Badge>
+                </td>
+                <td>
+                  {b.hasBooking ? (
+                    <span className="field__hint">
+                      Held by a booking — resolve it from the Bookings page.
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      disabled={busyId === b.id}
+                      onClick={() => void toggle(b)}
+                    >
+                      {busyId === b.id
+                        ? '…'
+                        : b.status === 'available'
+                          ? 'Mark occupied'
+                          : 'Mark free'}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

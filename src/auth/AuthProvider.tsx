@@ -65,6 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // api.ts fires this when an authorized call comes back 401 — the token
+  // expired mid-session. It has already cleared the stored token; dropping
+  // the profile makes the Gate show the login screen.
+  useEffect(() => {
+    const onExpired = () => setProfile(null)
+    window.addEventListener('medan:session-expired', onExpired)
+    return () => window.removeEventListener('medan:session-expired', onExpired)
+  }, [])
+
   const signIn = useCallback(async (email: string, password: string) => {
     const res = await api.login(email, password)
     session.set(res.token)

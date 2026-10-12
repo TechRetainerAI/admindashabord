@@ -86,8 +86,23 @@ async function request<T>(
   }
 
   const body = await parse(res)
-  if (!res.ok) throw new ApiError(messageFrom(body, res.status), res.status)
+  if (!res.ok) throw toApiError(res.status, body, needsAuth)
   return body as T
+}
+
+/**
+ * A 401 on an authorized call means the 12h staff token ran out (or was
+ * revoked) while the tab sat open. The reads all work signed-out, so without
+ * this every page looked fine while every save failed with a cryptic error —
+ * drop the session and the Gate swaps in the login screen.
+ */
+function toApiError(status: number, body: unknown, needsAuth: boolean): ApiError {
+  if (status === 401 && needsAuth) {
+    session.clear()
+    window.dispatchEvent(new Event('medan:session-expired'))
+    return new ApiError('Your session has expired — sign in again.', 401)
+  }
+  return new ApiError(messageFrom(body, status), status)
 }
 
 const qs = (params: Record<string, string | number | undefined>) => {
@@ -234,6 +249,16 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
+  /**
+   * Mark one bed occupied (a walk-in who paid outside the app) or free it
+   * again. 409 when a booking holds the bed — resolve the booking instead.
+   */
+  setBedStatus: (hostelId: string, roomId: string, bedId: string, status: 'available' | 'occupied') =>
+    request<Room>(`/api/hostels/${hostelId}/rooms/${roomId}/beds/${bedId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
+
   // --- manual payments ------------------------------------------------------
   manualPayments: (params: { status?: ManualPaymentStatus } = {}) =>
     request<ManualPaymentReview[]>(`/api/admin/payments/manual${qs(params)}`),
@@ -262,7 +287,7 @@ export const api = {
     } catch {
       throw new ApiError(`Cannot reach the MeDan API at ${BASE_URL}.`, 0)
     }
-    if (!res.ok) throw new ApiError(messageFrom(await parse(res), res.status), res.status)
+    if (!res.ok) throw toApiError(res.status, await parse(res), true)
     return URL.createObjectURL(await res.blob())
   },
 

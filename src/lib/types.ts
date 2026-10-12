@@ -140,6 +140,17 @@ export interface Room {
   photos: string[]
   /** Same photos with ids so a specific one can be deleted. */
   photoItems: HostelPhoto[]
+  /** The individual beds — who's free, who's in. */
+  beds: BedSummary[]
+}
+
+/** One bed inside a room. `reserved` = held by a pending booking. */
+export interface BedSummary {
+  id: string
+  label: string
+  status: 'available' | 'reserved' | 'occupied'
+  /** True when a booking holds it — then it can't be flipped by hand. */
+  hasBooking: boolean
 }
 
 /**
