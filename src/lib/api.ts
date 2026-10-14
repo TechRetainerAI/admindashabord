@@ -5,6 +5,7 @@ import type {
   AdminStats,
   AdminUser,
   AvailabilityGroup,
+  BroadcastHistoryItem,
   CampusEvent,
   SaveEventRequest,
   CreateHostelRequest,
@@ -277,10 +278,11 @@ export const api = {
     }),
 
   /**
-   * Fetches a proof screenshot (an authorized endpoint, not a static file) and
-   * returns an object URL for an <img>. Callers must revokeObjectURL it.
+   * Fetches a proof (an authorized endpoint, not a static file) and returns an
+   * object URL plus whether it is a video — proofs can be a screenshot or a
+   * screen recording. Callers must revokeObjectURL it.
    */
-  async proofObjectUrl(path: string): Promise<string> {
+  async proofObjectUrl(path: string): Promise<{ url: string; isVideo: boolean }> {
     let res: Response
     try {
       res = await fetch(`${BASE_URL}${path}`, { headers: authHeader() })
@@ -288,7 +290,8 @@ export const api = {
       throw new ApiError(`Cannot reach the MeDan API at ${BASE_URL}.`, 0)
     }
     if (!res.ok) throw toApiError(res.status, await parse(res), true)
-    return URL.createObjectURL(await res.blob())
+    const blob = await res.blob()
+    return { url: URL.createObjectURL(blob), isVideo: blob.type.startsWith('video/') }
   },
 
   // --- referrals ----------------------------------------------------------
@@ -343,6 +346,10 @@ export const api = {
 
   notificationReach: () =>
     request<NotificationReach>('/api/admin/notifications/reach'),
+
+  /** The last 100 staff sends, newest first. */
+  notificationHistory: () =>
+    request<BroadcastHistoryItem[]>('/api/admin/notifications/history'),
 
   sendNotification: (body: SendNotificationRequest) =>
     request<SendNotificationResponse>('/api/admin/notifications/send', {

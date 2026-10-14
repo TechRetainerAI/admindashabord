@@ -162,7 +162,7 @@ function PaymentCard({
           )}
         </dl>
 
-        <Proof proofUrl={p.proofUrl} />
+        <Proofs urls={p.proofUrls ?? (p.proofUrl ? [p.proofUrl] : [])} />
       </div>
 
       {p.reviewNote && <blockquote className="quote">{p.reviewNote}</blockquote>}
@@ -226,26 +226,41 @@ function PaymentCard({
   )
 }
 
+/** Up to three receipts per submission — screenshots or screen recordings. */
+function Proofs({ urls }: { urls: string[] }) {
+  if (urls.length === 0) return <div className="proof proof--none">No proof uploaded</div>
+  return (
+    <div className="proofs">
+      {urls.map((u) => (
+        <Proof key={u} proofUrl={u} />
+      ))}
+    </div>
+  )
+}
+
 /**
- * The receipt screenshot. The API serves it from an authorized endpoint (a MoMo
- * receipt shows the student's number and balance), so it is fetched with the
- * bearer token into an object URL rather than pointed at by src.
+ * One proof — a receipt screenshot or a screen recording of the MoMo app. The
+ * API serves it from an authorized endpoint (it shows the student's number and
+ * balance), so it is fetched with the bearer token into an object URL rather
+ * than pointed at by src.
  */
-function Proof({ proofUrl }: { proofUrl: string | null }) {
-  const [src, setSrc] = useState<string | null>(null)
+function Proof({ proofUrl }: { proofUrl: string }) {
+  const [src, setSrc] = useState<{ url: string; isVideo: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (!proofUrl) return
     let url: string | null = null
     let cancelled = false
 
     api
       .proofObjectUrl(proofUrl)
-      .then((u) => {
-        if (cancelled) URL.revokeObjectURL(u)
-        else setSrc((url = u))
+      .then((p) => {
+        if (cancelled) URL.revokeObjectURL(p.url)
+        else {
+          url = p.url
+          setSrc(p)
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -257,8 +272,6 @@ function Proof({ proofUrl }: { proofUrl: string | null }) {
     }
   }, [proofUrl])
 
-  if (!proofUrl) return <div className="proof proof--none">No screenshot</div>
-
   if (error) return <div className="proof proof--none">{error}</div>
 
   if (!src) return <div className="proof proof--none">Loading proof…</div>
@@ -266,11 +279,32 @@ function Proof({ proofUrl }: { proofUrl: string | null }) {
   return (
     <>
       <button type="button" className="proof" onClick={() => setOpen(true)} title="View full size">
-        <img src={src} alt="Payment receipt screenshot" />
+        {src.isVideo ? (
+          // muted so the thumbnail can't make noise; the lightbox has controls.
+          <video src={src.url} muted playsInline preload="metadata" />
+        ) : (
+          <img src={src.url} alt="Payment receipt screenshot" />
+        )}
+        {src.isVideo && <span className="proof__play">▶</span>}
       </button>
       {open && (
-        <div className="lightbox" role="dialog" aria-label="Payment receipt" onClick={() => setOpen(false)}>
-          <img src={src} alt="Payment receipt screenshot" />
+        <div
+          className="lightbox"
+          role="dialog"
+          aria-label="Payment receipt"
+          onClick={() => setOpen(false)}
+        >
+          {src.isVideo ? (
+            <video
+              src={src.url}
+              controls
+              autoPlay
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img src={src.url} alt="Payment receipt screenshot" />
+          )}
         </div>
       )}
     </>

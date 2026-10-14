@@ -265,6 +265,23 @@ export interface SendNotificationResponse {
   message: string
 }
 
+/** GET /api/admin/notifications/history — one past staff send. */
+export interface BroadcastHistoryItem {
+  id: string
+  title: string
+  body: string
+  route: string | null
+  imageUrl: string | null
+  /** "everyone", "role student", or "user {id}". */
+  audience: string
+  recipients: number
+  devices: number
+  /** False when push wasn't configured — in-app feeds only. */
+  delivered: boolean
+  sentByName: string
+  createdAt: string
+}
+
 /** How many people a broadcast can actually reach right now. */
 export interface NotificationReach {
   totalUsers: number
@@ -291,8 +308,10 @@ export interface ManualPaymentReview {
   senderPhone: string | null
   senderName: string | null
   providerTransactionId: string | null
-  /** Authorized endpoint for the screenshot — fetch with the bearer token, not an <img src>. */
+  /** Authorized endpoint for the first proof — fetch with the bearer token, not an <img src>. */
   proofUrl: string | null
+  /** Every proof in upload order (…/proof/0, /proof/1, …) — images or videos. */
+  proofUrls: string[]
   submittedAt: string | null
   reviewedAt: string | null
   reviewNote: string | null

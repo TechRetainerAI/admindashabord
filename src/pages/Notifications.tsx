@@ -8,7 +8,7 @@ import type {
   SendNotificationResponse,
   UserRole,
 } from '../lib/types'
-import { Card, ErrorBox, Field, Spinner } from '../components/ui'
+import { Badge, Card, Empty, ErrorBox, Field, Spinner, dateTime } from '../components/ui'
 
 const MAX_TITLE = 80
 const MAX_BODY = 500
@@ -27,6 +27,7 @@ const ROUTES = [
 
 export function Notifications() {
   const reach = useAsync(() => api.notificationReach())
+  const history = useAsync(() => api.notificationHistory())
 
   const [audience, setAudience] = useState<NotificationAudience>('everyone')
   const [role, setRole] = useState<UserRole>('student')
@@ -93,6 +94,8 @@ export function Notifications() {
       setImage(null)
       setConfirming(false)
       reach.reload()
+      // The send is in the log now — show it, so "did it go out?" has an answer.
+      history.reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -323,6 +326,53 @@ export function Notifications() {
           </p>
         </Card>
       </div>
+
+      <Card title="Recently sent">
+        {history.error && <ErrorBox message={history.error} onRetry={history.reload} />}
+        {history.loading && !history.data && <Spinner />}
+
+        {history.data &&
+          (history.data.length === 0 ? (
+            <Empty
+              title="Nothing sent yet"
+              hint="Every notification sent from this page is recorded here."
+            />
+          ) : (
+            <div className="tablewrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Message</th>
+                    <th>Audience</th>
+                    <th className="num">Feeds</th>
+                    <th className="num">Pushed</th>
+                    <th>Sent by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.data.map((b) => (
+                    <tr key={b.id}>
+                      <td>{dateTime(b.createdAt)}</td>
+                      <td>
+                        <span className="cell__main">{b.title}</span>
+                        <span className="cell__sub">{b.body}</span>
+                      </td>
+                      <td>
+                        <Badge tone={b.audience === 'everyone' ? 'info' : 'neutral'}>
+                          {b.audience}
+                        </Badge>
+                      </td>
+                      <td className="num">{b.recipients}</td>
+                      <td className="num">{b.delivered ? b.devices : 'feed only'}</td>
+                      <td>{b.sentByName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+      </Card>
     </>
   )
 }
